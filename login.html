@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Dashboard Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .login-form {
+            transition: all 0.3s ease;
+        }
+        
+        .login-form:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+        }
+        
+        .input-field {
+            transition: all 0.3s ease;
+        }
+        
+        .input-field:focus {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.2);
+        }
+        
+        .login-btn {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(59, 130, 246, 0.4);
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
+    <!-- Login Form -->
+    <div class="login-form glassmorphism rounded-3xl p-8 w-full max-w-md">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-chart-line text-2xl text-white"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-white mb-2">Dashboard Analytics</h1>
+            <p class="text-white/80">Masuk untuk mengakses dashboard toko Anda</p>
+        </div>
+
+        <!-- Login Form -->
+        <form id="loginForm" class="space-y-6">
+            <div>
+                <label class="block text-white/90 text-sm font-medium mb-2">
+                    <i class="fas fa-user mr-2"></i>Username
+                </label>
+                <input 
+                    type="text" 
+                    id="username" 
+                    class="input-field w-full px-4 py-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-white/60 focus:outline-none focus:border-white/50"
+                    placeholder="Masukkan username"
+                    required
+                >
+            </div>
+            
+            <div>
+                <label class="block text-white/90 text-sm font-medium mb-2">
+                    <i class="fas fa-lock mr-2"></i>Password
+                </label>
+                <div class="relative">
+                    <input 
+                        type="password" 
+                        id="password" 
+                        class="input-field w-full px-4 py-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-white/60 focus:outline-none focus:border-white/50 pr-12"
+                        placeholder="Masukkan password"
+                        required
+                    >
+                    <button type="button" id="togglePassword" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <button 
+                type="submit" 
+                id="loginBtn"
+                class="login-btn w-full py-3 rounded-xl text-white font-semibold flex items-center justify-center"
+            >
+                <span id="loginBtnText">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Masuk Dashboard
+                </span>
+                <div id="loginSpinner" class="loading-spinner hidden"></div>
+            </button>
+        </form>
+
+
+    </div>
+
+    <!-- Error Message -->
+    <div id="errorMessage" class="hidden fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        <span id="errorText">Terjadi kesalahan</span>
+        <button onclick="hideError()" class="ml-3 text-white hover:text-gray-200">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <script>
+        class AuthSystem {
+            constructor() {
+                this.maxAttempts = 3;
+                this.currentAttempts = 0;
+                this.authData = null;
+                this.init();
+            }
+
+            async init() {
+                try {
+                    // Force clear any existing sessions first
+                    this.forceCleanSession();
+                    
+                    // Load auth data from JSON file
+                    await this.loadAuthData();
+                    
+                    // Setup event listeners
+                    this.setupEventListeners();
+                    
+                    // Check if already logged in
+                    this.checkExistingSession();
+                    
+                    console.log('✅ Client-side auth system initialized');
+                } catch (error) {
+                    console.error('❌ Error initializing auth system:', error);
+                    this.showError('Gagal memuat data authentication.');
+                }
+            }
+
+            forceCleanSession() {
+                // Clear all possible session keys
+                const keysToRemove = [
+                    'userSession', 
+                    'selectedStoreId',
+                    'selectedStoreName',
+                    'authToken',
+                    'currentUser'
+                ];
+                
+                keysToRemove.forEach(key => {
+                    if (localStorage.getItem(key)) {
+                        console.log(`🧹 Clearing old session data: ${key}`);
+                        localStorage.removeItem(key);
+                    }
+                });
+                
+                // Also clear sessionStorage if any
+                sessionStorage.clear();
+                
+                console.log('🧹 Session cleanup completed');
+            }
+
+            async loadAuthData() {
+                try {
+                    console.log('📂 Loading auth data from auth.json...');
+                    const response = await fetch('./auth.json');
+                    if (!response.ok) throw new Error('Failed to load auth.json');
+                    
+                    this.authData = await response.json();
+                    console.log('✅ Auth data loaded successfully');
+                    console.log('👥 Available users:', this.authData.users.length);
+                } catch (error) {
+                    console.error('❌ Failed to load auth data:', error);
+                    throw new Error('Gagal memuat file auth.json');
+                }
+            }
+
+            setupEventListeners() {
+                // Login form submission
+                const loginForm = document.getElementById('loginForm');
+                loginForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleLogin();
+                });
+
+                // Toggle password visibility
+                const togglePassword = document.getElementById('togglePassword');
+                const passwordField = document.getElementById('password');
+                
+                togglePassword.addEventListener('click', () => {
+                    const type = passwordField.getAttribute('type') === 'password' ? 'text' : 'password';
+                    passwordField.setAttribute('type', type);
+                    
+                    const icon = togglePassword.querySelector('i');
+                    icon.classList.toggle('fa-eye');
+                    icon.classList.toggle('fa-eye-slash');
+                });
+
+                // Enter key support
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        loginForm.dispatchEvent(new Event('submit'));
+                    }
+                });
+            }
+
+            checkExistingSession() {
+                const userSession = localStorage.getItem('userSession');
+                console.log('🔍 Checking existing session:', userSession ? 'EXISTS' : 'NOT_FOUND');
+                
+                if (userSession) {
+                    try {
+                        const sessionData = JSON.parse(userSession);
+                        const loginTime = sessionData.loginTime;
+                        const currentTime = new Date().getTime();
+                        const sessionTimeout = this.authData?.settings?.session_timeout || 3600; // 1 hour default
+                        
+                        // Check if session is still valid (within timeout)
+                        if (currentTime - loginTime < sessionTimeout * 1000) {
+                            console.log('✅ Valid session found, redirecting to dashboard...');
+                            console.log('👤 User:', sessionData.user.username);
+                            console.log('🏪 Store:', sessionData.user.store_name);
+                            this.redirectToDashboard(sessionData.user);
+                            return;
+                        } else {
+                            console.log('⏰ Session expired, clearing...');
+                            this.clearSessionData();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error parsing session data:', error);
+                        this.clearSessionData();
+                    }
+                } else {
+                    console.log('ℹ️ No existing session found');
+                }
+            }
+
+            clearSessionData() {
+                const keysToRemove = [
+                    'userSession',
+                    'selectedStoreId',
+                    'selectedStoreName'
+                ];
+                
+                keysToRemove.forEach(key => {
+                    if (localStorage.getItem(key)) {
+                        console.log(`🧹 Removing: ${key}`);
+                        localStorage.removeItem(key);
+                    }
+                });
+            }
+
+            handleLogin() {
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+
+                console.log('🔐 Attempting client-side login for username:', username);
+
+                if (!username || !password) {
+                    this.showError('Username dan password harus diisi');
+                    return;
+                }
+
+                // Show loading state
+                this.setLoadingState(true);
+
+                try {
+                    // Find user in auth data
+                    const user = this.authData.users.find(u => 
+                        u.username === username && u.password === password
+                    );
+
+                    if (user) {
+                        // Login successful
+                        console.log('✅ Login successful for user:', user.username);
+                        console.log('🏪 Assigned store:', user.store_name);
+                        console.log('🔑 User role:', user.role);
+                        this.handleSuccessfulLogin(user);
+                    } else {
+                        // Login failed
+                        console.log('❌ Login failed: Invalid credentials');
+                        this.handleFailedLogin('Username atau password salah');
+                    }
+                } catch (error) {
+                    console.error('❌ Login error:', error);
+                    this.showError('Terjadi kesalahan saat login');
+                } finally {
+                    this.setLoadingState(false);
+                }
+            }
+
+            handleSuccessfulLogin(user) {
+                console.log('💾 Storing session data...');
+                console.log('👤 User data:', user);
+                console.log('🔑 User role:', user.role);
+
+                // Store session data (client-side only)
+                const sessionData = {
+                    user: user,
+                    loginTime: new Date().getTime(),
+                    storeId: user.store_id,
+                    storeName: user.store_name
+                };
+                
+                localStorage.setItem('userSession', JSON.stringify(sessionData));
+                localStorage.setItem('selectedStoreId', user.store_id);
+                localStorage.setItem('selectedStoreName', user.store_name);
+
+                console.log('✅ Session data stored successfully');
+                console.log('🏪 Store ID:', user.store_id);
+                console.log('🏪 Store Name:', user.store_name);
+
+                // Verify data was stored
+                const storedStoreId = localStorage.getItem('selectedStoreId');
+                console.log('🔍 Verification - Store ID stored:', storedStoreId);
+
+                // Check user role and redirect accordingly
+                if (user.role === 'Owner') {
+                    console.log('👤 Owner login - Direct to dashboard for:', user.store_name);
+                    this.showSuccessMessage(user);
+                } else if (user.role === 'Admin') {
+                    console.log('👤 Admin login - Can access all stores');
+                    this.showSuccessMessage(user);
+                } else {
+                    console.log('👤 Unknown role:', user.role);
+                    this.showSuccessMessage(user);
+                }
+            }
+
+            handleFailedLogin(message) {
+                this.currentAttempts++;
+                
+                if (this.currentAttempts >= this.maxAttempts) {
+                    this.showError('Terlalu banyak percobaan login. Silakan coba lagi nanti.');
+                    this.disableLoginForm();
+                } else {
+                    const remaining = this.maxAttempts - this.currentAttempts;
+                    this.showError(`${message}. Sisa percobaan: ${remaining}`);
+                }
+            }
+
+            showSuccessMessage(user) {
+                console.log('🎉 Showing success message for:', user.username);
+                console.log('🔄 Will redirect to dashboard in 2 seconds...');
+                
+                const roleIcon = user.role === 'Owner' ? 'fa-store' : 'fa-user-shield';
+                const roleColor = user.role === 'Owner' ? 'bg-blue-500' : 'bg-green-500';
+                
+                document.body.innerHTML = `
+                    <div class="fixed inset-0 gradient-bg flex items-center justify-center">
+                        <div class="glassmorphism rounded-3xl p-8 text-center text-white max-w-md mx-4">
+                            <div class="w-16 h-16 ${roleColor} rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas ${roleIcon} text-2xl text-white"></i>
+                            </div>
+                            <h2 class="text-2xl font-bold mb-2">Login Berhasil!</h2>
+                            <p class="mb-2">Selamat datang, <strong>${user.role}</strong></p>
+                            <p class="text-sm opacity-90 mb-6">${user.store_name}</p>
+                            <div class="loading-spinner mx-auto"></div>
+                        </div>
+                    </div>
+                `;
+
+                // Add countdown for debugging
+                let countdown = 3;
+                const countdownInterval = setInterval(() => {
+                    countdown--;
+                    console.log(`⏱️ Redirecting in ${countdown} seconds...`);
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        console.log('🔄 Redirecting to dashboard now...');
+                        
+                        // Role-based redirect
+                        if (user.role === 'Owner') {
+                            // Owner goes directly to dashboard for their store
+                            window.location.href = 'index.html';
+                        } else if (user.role === 'Admin') {
+                            // Admin can choose store or go to dashboard
+                            window.location.href = 'index.html';
+                        } else {
+                            // Default redirect
+                            window.location.href = 'index.html';
+                        }
+                    }
+                }, 1000);
+            }
+
+            redirectToDashboard(user) {
+                console.log('🔄 Redirecting to existing session for:', user.username);
+                
+                document.body.innerHTML = `
+                    <div class="fixed inset-0 gradient-bg flex items-center justify-center">
+                        <div class="glassmorphism rounded-3xl p-8 text-center text-white max-w-md mx-4">
+                            <div class="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-chart-line text-2xl text-white"></i>
+                            </div>
+                            <h2 class="text-2xl font-bold mb-2">Sesi Aktif</h2>
+                            <p class="mb-4">Melanjutkan sesi untuk <strong>${user.store_name}</strong></p>
+                            <div class="loading-spinner mx-auto"></div>
+                        </div>
+                    </div>
+                `;
+
+                setTimeout(() => {
+                    console.log('🔄 Redirecting to dashboard (existing session)...');
+                    window.location.href = 'index.html';
+                }, 1500);
+            }
+
+            setLoadingState(isLoading) {
+                const loginBtn = document.getElementById('loginBtn');
+                const loginBtnText = document.getElementById('loginBtnText');
+                const loginSpinner = document.getElementById('loginSpinner');
+                const form = document.getElementById('loginForm');
+
+                if (isLoading) {
+                    loginBtn.disabled = true;
+                    loginBtn.classList.add('opacity-75', 'cursor-not-allowed');
+                    loginBtnText.classList.add('hidden');
+                    loginSpinner.classList.remove('hidden');
+                    form.classList.add('pointer-events-none');
+                } else {
+                    loginBtn.disabled = false;
+                    loginBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                    loginBtnText.classList.remove('hidden');
+                    loginSpinner.classList.add('hidden');
+                    form.classList.remove('pointer-events-none');
+                }
+            }
+
+            disableLoginForm() {
+                const form = document.getElementById('loginForm');
+                const inputs = form.querySelectorAll('input, button');
+                
+                inputs.forEach(input => {
+                    input.disabled = true;
+                    input.classList.add('opacity-50', 'cursor-not-allowed');
+                });
+
+                setTimeout(() => {
+                    this.enableLoginForm();
+                    this.currentAttempts = 0;
+                }, 30000); // Re-enable after 30 seconds
+            }
+
+            enableLoginForm() {
+                const form = document.getElementById('loginForm');
+                const inputs = form.querySelectorAll('input, button');
+                
+                inputs.forEach(input => {
+                    input.disabled = false;
+                    input.classList.remove('opacity-50', 'cursor-not-allowed');
+                });
+            }
+
+            showError(message) {
+                const errorMessage = document.getElementById('errorMessage');
+                const errorText = document.getElementById('errorText');
+                errorText.textContent = message;
+                errorMessage.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    this.hideError();
+                }, 5000);
+            }
+
+            hideError() {
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.classList.add('hidden');
+            }
+        }
+
+        // Global functions
+        function hideError() {
+            window.authSystem.hideError();
+        }
+
+        // Initialize auth system when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.authSystem = new AuthSystem();
+        });
+    </script>
+</body>
+</html>
